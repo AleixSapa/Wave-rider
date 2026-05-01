@@ -1,0 +1,94 @@
+import { io, Socket } from 'socket.io-client';
+
+export class Network {
+  socket: Socket | null = null;
+  roomId: string | null = null;
+  players: Record<string, any> = {};
+  isMultiplayer: boolean = false;
+  socketId: string | null = null;
+
+  onRoomState?: (state: any) => void;
+  onGameStarting?: (startTime: number) => void;
+  onPlayersUpdate?: (players: Record<string, any>) => void;
+  onPlayerDied?: (id: string) => void;
+  onGameFinished?: (finalPlayers: Record<string, any>) => void;
+  onError?: (msg: string) => void;
+
+  connect() {
+    this.socket = io();
+    
+    this.socket.on('connect', () => {
+      this.socketId = this.socket?.id || null;
+    });
+
+    this.socket.on('room_created', (id: string) => {
+      this.roomId = id;
+      this.isMultiplayer = true;
+    });
+
+    this.socket.on('joined_room', (id: string) => {
+      this.roomId = id;
+      this.isMultiplayer = true;
+    });
+
+    this.socket.on('room_state', (state: any) => {
+      this.players = state.players;
+      if (this.onRoomState) this.onRoomState(state);
+    });
+
+    this.socket.on('game_starting', (startTime: number) => {
+      if (this.onGameStarting) this.onGameStarting(startTime);
+    });
+
+    this.socket.on('players_update', (players: Record<string, any>) => {
+      for (const id in players) {
+        if (id !== this.socketId) {
+          this.players[id] = players[id];
+        }
+      }
+      if (this.onPlayersUpdate) this.onPlayersUpdate(players);
+    });
+
+    this.socket.on('player_died_event', (id: string) => {
+      if (this.players[id]) {
+        this.players[id].isDead = true;
+      }
+      if (this.onPlayerDied) this.onPlayerDied(id);
+    });
+
+    this.socket.on('game_finished', (players: Record<string, any>) => {
+      if (this.onGameFinished) this.onGameFinished(players);
+    });
+
+    this.socket.on('error', (msg: string) => {
+      if (this.onError) this.onError(msg);
+    });
+  }
+
+  createRoom(roomId?: string, playerName?: string) {
+    this.socket?.emit('create_room', roomId, playerName);
+  }
+
+  joinRoom(id: string, playerName?: string) {
+    this.socket?.emit('join_room', id, playerName);
+  }
+
+  startGame() {
+    if (this.roomId) {
+      this.socket?.emit('start_game', this.roomId);
+    }
+  }
+
+  updatePlayer(data: any) {
+    if (this.isMultiplayer && this.roomId) {
+      // Throttle this in practice, but fine for now
+      this.socket?.emit('update_player', this.roomId, data);
+    }
+  }
+
+  notifyDeath() {
+    if (this.isMultiplayer && this.roomId) {
+      this.socket?.emit('player_died', this.roomId);
+    }
+  }
+}

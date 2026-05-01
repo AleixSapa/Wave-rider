@@ -1,0 +1,6 @@
+{
+  "name": "Wave Rider",
+  "description": "Flippy Race style web game using Canvas API and React.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wave Rider - Standalone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-left">
+                <div class="stat-box">
+                    <span class="label">DISTANCE</span>
+                    <span id="distance">0 m</span>
+                </div>
+                <div id="combo-badge" class="hidden">X2</div>
+            </div>
+            
+            <div id="shield-indicator" class="hidden">
+                <div id="shield-label">SHIELD READY</div>
+                <div id="shield-timer-display">10.0s</div>
+            </div>
+
+            <div class="hud-right">
+                <div class="stat-box">
+                    <span class="label">SPEED</span>
+                    <span id="speed">0 KM/H</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">COINS</span>
+                    <span id="coins">🪙 0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menus -->
+        <div id="overlay" class="overlay">
+            <div id="main-menu" class="menu-content">
+                <h1>WAVE RIDER</h1>
+                <p>Mantingues ESPAI per fer voltes</p>
+                <button id="start-btn" class="primary-btn">COMENÇAR JOC</button>
+                <p class="hint">Fes un DOBLE BACKFLIP per la Cúpula</p>
+            </div>
+
+            <div id="game-over" class="menu-content hidden">
+                <h2>HAS CRASHAT!</h2>
+                <div class="final-stats">
+                    <p>Distància: <span id="final-dist">0</span>m</p>
+                    <p>Monedes: <span id="final-coins">0</span></p>
+                </div>
+                <button id="retry-btn" class="primary-btn">TORNA-HI</button>
+            </div>
+        </div>
+
+        <div id="instructions">MANTINGUES ESPAI PER VOLTAR</div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
