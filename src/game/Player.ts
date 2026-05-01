@@ -56,11 +56,12 @@ export class Player {
     this.bikeCharges = this.maxBikeCharges;
   }
 
-  update(dt: number, inputActive: boolean, getWaterHeight: (x: number) => number) {
+  update(dt: number, inputActive: boolean, getWaterHeight: (x: number) => number, forcedVx?: number) {
     if (this.isDead) return;
 
     // Movement
     let currentSpeed = this.baseSpeed;
+
     if (this.boostTimer > 0) {
       currentSpeed = this.baseSpeed * 1.5; // Boost is 1.5x base speed (approx 600 max)
       this.boostTimer -= dt;
@@ -74,9 +75,11 @@ export class Player {
     }
 
     if (this.isGrounded) {
-      this.vx = currentSpeed;
+      this.vx = forcedVx ?? currentSpeed;
     } else if (this.boostTimer > 0) {
-      this.vx = Math.max(this.vx, currentSpeed);
+      this.vx = forcedVx ?? Math.max(this.vx, currentSpeed);
+    } else {
+        this.vx = forcedVx ?? this.vx;
     }
     
     this.x += this.vx * dt;
@@ -214,7 +217,7 @@ export class Player {
         SoundManager.playSplash();
         return;
       }
-      // Crashed (landed upside down)
+      
       this.die();
     } else {
       // Good landing
@@ -222,7 +225,7 @@ export class Player {
         this.combo++;
         this.boostTimer = Math.max(this.boostTimer, 2.0); // 2 seconds boost, don't overwrite if longer
         if (this.equippedBike === 'fire' && this.isShieldReady) {
-          this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
+          this.shieldTimer = Math.max(this.shieldTimer, 3.0);
           this.isShieldReady = false;
         }
         if (this.equippedBike === 'super') {
@@ -232,7 +235,7 @@ export class Player {
       } else if (absoluteAngle < 0.2 && this.totalRotationInAir > 1) { // Near perfect landing, small jump
         // small bonus?
         if (this.equippedBike === 'fire' && this.isShieldReady) {
-          this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
+          this.shieldTimer = Math.max(this.shieldTimer, 3.0);
           this.isShieldReady = false;
         }
       } else if (this.isShieldReady) {
@@ -342,6 +345,14 @@ export class Player {
       ctx.setLineDash([5, 5]);
       ctx.lineDashOffset = -Date.now() / 50;
       ctx.stroke();
+
+      if (this.shieldTimer > 0 && !isCharging) {
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.ceil(this.shieldTimer).toString(), 0, 0);
+      }
     }
 
     ctx.restore();

@@ -23,6 +23,9 @@ export class GameEngine {
   isMultiplayer: boolean = false;
   hasNotifiedDeath: boolean = false;
   playerName: string = 'Anonymous';
+  
+  playerFinalDistance: number = 0;
+  lastNetworkUpdateTime: number = 0;
 
   setPlayerBaseSpeed(speed: number) {
     this.player.baseSpeed = speed;
@@ -31,7 +34,7 @@ export class GameEngine {
   // Callbacks for React UI
   onScoreUpdate?: (distance: number, combo: number, speed: number, coins: number, fireCharges: number, shieldTimer: number, shieldReady: boolean, boostTimer: number) => void;
   onGameOver?: (finalScore: number, allPlayersData?: any, sessionCoins?: number) => void;
-  onLobbyUpdate?: (roomId: string, players: Record<string, any>, isHost: boolean) => void;
+  onLobbyUpdate?: (roomId: string, players: Record<string, any>, isHost: boolean, readyPlayers: Record<string, boolean>) => void;
   onGameCountdown?: (startTime: number) => void;
   onError?: (msg: string) => void;
 
@@ -86,7 +89,8 @@ export class GameEngine {
           console.log("Am I host?", isHost, "My ID:", myId, "Host ID:", state.hostId);
           
           if (this.onLobbyUpdate) {
-              this.onLobbyUpdate(state.id, state.players, isHost);
+              console.log("Engine: Calling onLobbyUpdate", state.id, state.players);
+              this.onLobbyUpdate(state.id, state.players, isHost, this.network.readyPlayers);
           }
         };
 
@@ -99,12 +103,14 @@ export class GameEngine {
     };
 
     this.network.onGameStarting = (startTime) => {
+      console.log("Engine: game starting at", startTime, "Current time", Date.now());
       if (this.onGameCountdown) {
         this.onGameCountdown(startTime);
       }
       
       const checkStart = () => {
         if (Date.now() >= startTime) {
+          console.log("Engine: starting game now");
           this.startGame(true);
         } else {
           setTimeout(checkStart, 100);
@@ -115,6 +121,23 @@ export class GameEngine {
 
     this.network.onError = (msg) => {
       if (this.onError) this.onError(msg);
+    };
+    
+    this.network.onPlayersUpdate = (players) => {
+      if (this.gameState === 'multiplayer_lobby' && this.onLobbyUpdate) {
+        // We need to pass the updated player list. 
+        const myId = this.network.socketId || this.network.socket?.id;
+        const isHost = (this.network.hostId && this.network.hostId === myId) || (!this.network.hostId && Object.keys(this.network.players)[0] === myId);
+        this.onLobbyUpdate(this.network.roomId || '', this.network.players, isHost, this.network.readyPlayers);
+      }
+    };
+
+    this.network.onPlayerReadyUpdate = (readyPlayers) => {
+        if (this.gameState === 'multiplayer_lobby' && this.onLobbyUpdate) {
+            const myId = this.network.socketId || this.network.socket?.id;
+            const isHost = (this.network.hostId && this.network.hostId === myId) || (!this.network.hostId && Object.keys(this.network.players)[0] === myId);
+            this.onLobbyUpdate(this.network.roomId || '', this.network.players, isHost, readyPlayers);
+        }
     };
 
     this.network.onGameFinished = (players) => {
@@ -130,6 +153,10 @@ export class GameEngine {
 
   joinMultiplayerRoom(roomId: string) {
     this.network.joinRoom(roomId, this.playerName, this.player.equippedBike);
+  }
+
+  refreshMultiplayerRoom() {
+    this.network.refreshRoomState();
   }
 
   startMultiplayerGame() {
@@ -211,6 +238,7 @@ export class GameEngine {
     this.hasNotifiedDeath = false;
     this.isInputActive = false; // Reset input to avoid UI clicks carrying over
     this.player.reset();
+    this.playerFinalDistance = 0;
     this.world.objects = [];
     this.world.lastObjectX = 500;
     this.particles.particles = [];
@@ -262,7 +290,12 @@ export class GameEngine {
 
     this.player.update(dt, this.isInputActive, (x) => this.world.getWaterHeight(x, this.totalTime));
     
-    if (this.isMultiplayer) {
+    // Check death and record distance
+    if (this.player.isDead && !previousDead) {
+        this.playerFinalDistance = this.player.distance;
+    }
+    
+    if (this.isMultiplayer && (this.totalTime - this.lastNetworkUpdateTime > 0.05)) {
       this.network.updatePlayer({
         x: this.player.x,
         y: this.player.y,
@@ -273,6 +306,7 @@ export class GameEngine {
         name: this.playerName,
         bike: this.player.equippedBike
       });
+      this.lastNetworkUpdateTime = this.totalTime;
     }
 
     // camera X aims to keep player at 200px from left
@@ -287,7 +321,9 @@ export class GameEngine {
     }
 
     // Check game over transition
-    if (this.player.isDead && !previousDead) {
+    const raceFinished = this.player.isDead;
+    
+    if (raceFinished && !previousDead) {
       this.shakeTimer = 0.5; // shake for 0.5s
       this.gameState = 'gameover';
       if (this.isMultiplayer && !this.hasNotifiedDeath) {
@@ -344,7 +380,7 @@ export class GameEngine {
       this.ctx.globalAlpha = 0.5;
       for (const id in this.network.players) {
         const p = this.network.players[id];
-        if (!p.isDead) {
+        if (p && p.x !== undefined && !p.isDead) {
           this.ctx.save();
           this.ctx.translate(p.x - cameraX, p.y);
           this.ctx.rotate(p.rotation || 0);

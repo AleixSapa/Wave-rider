@@ -28,6 +28,8 @@ export default function WaveRider() {
   const [currentRoom, setCurrentRoom] = useState('');
   const [lobbyPlayers, setLobbyPlayers] = useState<any[]>([]);
   const [isLobbyHost, setIsLobbyHost] = useState(false);
+  const [isLocalReady, setIsLocalReady] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [multiplayerResults, setMultiplayerResults] = useState<any[] | null>(null);
   const [playerName, setPlayerName] = useState<string>('');
@@ -378,9 +380,13 @@ export default function WaveRider() {
       }
     };
 
-    engine.onLobbyUpdate = (roomId, players, isHost) => {
+    engine.onLobbyUpdate = (roomId, players, isHost, readyPlayers) => {
         setCurrentRoom(roomId);
-        setLobbyPlayers(Object.values(players));
+        const playersList = Object.values(players).map(p => ({
+            ...p,
+            isReady: !!readyPlayers[p.id]
+        }));
+        setLobbyPlayers(playersList);
         setIsLobbyHost(isHost);
     };
 
@@ -403,7 +409,18 @@ export default function WaveRider() {
     const interval = setInterval(() => {
         setGameState(engine.gameState);
         if (engine.gameState === 'multiplayer_lobby') {
-            setLobbyPlayers(Object.values(engine.network.players));
+            const players = Object.values(engine.network.players);
+            // Ensure local player exists in the list
+            const myId = engine.network.socketId;
+            console.log("Lobby Check: MyId:", myId, "Network players:", engine.network.players);
+            if (myId && !players.find(p => p.id === myId)) {
+                players.push({
+                    id: myId,
+                    name: engine.playerName,
+                    bike: engine.player.equippedBike
+                });
+            }
+            setLobbyPlayers(players);
         }
     }, 100);
 
@@ -462,9 +479,16 @@ export default function WaveRider() {
 
   const handleStartMultiplayer = async () => {
     if (currentRoom) {
+      setIsStarting(true);
       await supabase.from('rooms').update({ state: 'playing' }).eq('id', currentRoom);
     }
     engineRef.current?.startMultiplayerGame();
+  };
+
+  const handleToggleReady = () => {
+    const newReady = !isLocalReady;
+    setIsLocalReady(newReady);
+    engineRef.current?.network.setReady(newReady);
   };
 
   const savePlayerStateToSupabase = async (coins: number, speed_lvl: number, has_fire: boolean, has_gato: boolean, has_ramp: boolean, has_super: boolean, max_charges: number, shield_lvl: number, eq_bike: string) => {
@@ -744,9 +768,17 @@ export default function WaveRider() {
                   SHOP (BOTIGA)
                 </button>
 
-                <div className="w-full shrink-0 flex flex-col items-center bg-black/40 backdrop-blur-sm border border-white/20 p-6 rounded-xl">
-                    <h3 className="text-cyan-300 font-bold text-center mb-4 uppercase tracking-widest text-sm">Multiplayer Racing</h3>
-                    <div className="flex flex-col gap-4">
+                <div className="hidden w-full shrink-0 flex flex-col items-center bg-black/40 backdrop-blur-sm border border-white/20 p-6 rounded-xl">
+                    <div className="flex justify-between w-full mb-4">
+                        <h3 className="text-cyan-300 font-bold uppercase tracking-widest text-sm">Multiplayer Racing</h3>
+                        <button 
+                          onClick={() => engineRef.current?.refreshMultiplayerRoom()}
+                          className="text-[10px] text-white/60 hover:text-white uppercase font-bold transition-colors border border-white/20 px-2 py-1 rounded"
+                        >
+                          Refresh Room
+                        </button>
+                    </div>
+                    <div className="flex flex-col gap-4 w-full">
                         <button 
                           onClick={() => handleCreateRoom()}
                           className="w-full py-3 bg-gradient-to-b from-green-400 to-green-600 text-white font-bold text-xl italic rounded-lg border-b-4 border-green-800 hover:translate-y-1 hover:border-b-0 transition-all shadow-xl active:scale-95 cursor-pointer"
@@ -1040,7 +1072,7 @@ export default function WaveRider() {
       )}
 
       {/* Lobby Overlay */}
-    {gameState === 'multiplayer_lobby' && (
+    {false && gameState === 'multiplayer_lobby' && (
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl z-30 select-none">
           <div className="mb-8 flex flex-col items-center gap-2">
             <h2 className="text-5xl font-black text-cyan-400 italic drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">RACING LOBBY</h2>
@@ -1060,7 +1092,9 @@ export default function WaveRider() {
               
               <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-style">
                   {lobbyPlayers.length === 0 ? (
-                    <div className="text-center py-10 text-white/20 font-bold italic">Gathering team...</div>
+                    <div className="text-center py-10 text-white/20 font-bold italic">
+                        {engineRef.current?.network.socketId ? 'Gathering team...' : 'Connecting...'}
+                    </div>
                   ) : (
                     lobbyPlayers.map((p, i) => (
                         <div key={p.id} className={`group bg-white/5 border ${p.id === engineRef.current?.network.socketId ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-white/5'} rounded-xl p-4 flex justify-between items-center transition-all hover:bg-white/10`}>
@@ -1105,25 +1139,33 @@ export default function WaveRider() {
                 </div>
               </div>
            ) : (
-              <div className="mt-10 w-full max-w-lg flex flex-col gap-4">
-                {isLobbyHost ? (
-                  <button 
-                      onClick={handleStartMultiplayer}
-                      disabled={lobbyPlayers.length < 1}
-                      className="w-full py-5 bg-gradient-to-b from-cyan-400 to-blue-600 text-white font-black text-2xl italic tracking-[0.1em] rounded-2xl border-b-8 border-blue-800 hover:translate-y-1 hover:border-b-4 transition-all shadow-[0_20px_40px_rgba(6,182,212,0.3)] active:scale-95 cursor-pointer disabled:opacity-50 disabled:grayscale"
-                  >
-                      START RACE
-                  </button>
-                ) : (
-                  <div className="w-full py-5 bg-white/5 border-2 border-white/10 rounded-2xl flex items-center justify-center gap-3">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
-                    </div>
-                    <span className="text-white/60 font-black italic text-xl uppercase tracking-widest font-sans">Waiting for Host...</span>
-                  </div>
-                )}
+              <div className="mt-10 flex flex-col items-center w-full">
+                <div className="w-full max-w-lg flex flex-col gap-4">
+                  {isLobbyHost ? (
+                      <>
+                        <button 
+                            onClick={handleStartMultiplayer}
+                            disabled={lobbyPlayers.length < 1 || isStarting}
+                            className="w-full py-5 bg-gradient-to-b from-cyan-400 to-blue-600 text-white font-black text-2xl italic tracking-[0.1em] rounded-2xl border-b-8 border-blue-800 hover:translate-y-1 hover:border-b-4 transition-all shadow-[0_20px_40px_rgba(6,182,212,0.3)] active:scale-95 cursor-pointer disabled:opacity-50 disabled:grayscale"
+                        >
+                            {isStarting ? 'STARTING...' : 'START RACE'}
+                        </button>
+                        <button 
+                          onClick={handleToggleReady}
+                          className={`w-full py-3 ${isLocalReady ? 'bg-green-500/20 text-green-400 border-green-500/50' : 'bg-white/5 text-white/60 border-white/10'} font-black text-xl italic rounded-xl border transition-all active:scale-95`}
+                        >
+                           {isLocalReady ? 'READY' : 'MARK READY'}
+                        </button>
+                      </>
+                  ) : (
+                    <button 
+                          onClick={handleToggleReady}
+                          className={`w-full py-5 ${isLocalReady ? 'bg-green-600' : 'bg-cyan-600'} text-white font-black text-2xl italic tracking-[0.1em] rounded-2xl border-b-8 ${isLocalReady ? 'border-green-800' : 'border-blue-800'} hover:translate-y-1 hover:border-b-4 transition-all shadow-[0_20px_40px_rgba(6,182,212,0.3)] active:scale-95 cursor-pointer`}
+                      >
+                        {isLocalReady ? 'READY' : 'SET READY'}
+                    </button>
+                  )}
+                </div>
                 
                 <button 
                   onClick={() => {
@@ -1131,7 +1173,7 @@ export default function WaveRider() {
                     engineRef.current?.network.connect(); // reconnect to be fresh
                     setGameState('menu');
                   }}
-                  className="text-white/40 hover:text-white font-black text-sm uppercase tracking-widest transition-colors py-2"
+                  className="mt-8 text-white/40 hover:text-white font-black text-sm uppercase tracking-widest transition-colors py-2"
                 >
                   Leave Room
                 </button>
@@ -1144,7 +1186,7 @@ export default function WaveRider() {
       {gameState === 'gameover' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md z-20 select-none">
             {multiplayerResults ? (
-               <h2 className="text-6xl md:text-7xl font-black text-yellow-500 italic drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] mb-6">RACE FINISHED!</h2>
+               <h2 className="text-6xl md:text-7xl font-black text-yellow-500 italic drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] mb-6">RACE RESULTS</h2>
             ) : (
                <h2 className="text-7xl font-black text-red-500 italic drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] mb-6">CRASHED!</h2>
             )}
