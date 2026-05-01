@@ -67,6 +67,15 @@ export default function WaveRider() {
   }, []);
 
   useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.player.equippedBike = equippedBike;
+      engineRef.current.player.maxBikeCharges = maxFireCharges;
+      engineRef.current.player.shieldMaxDuration = 10.0 + (shieldDurationLevel - 1) * 1.0;
+      engineRef.current.setPlayerBaseSpeed(200 + (speedLevel - 1) * 20);
+    }
+  }, [equippedBike, maxFireCharges, shieldDurationLevel, speedLevel]);
+
+  useEffect(() => {
     if (gameState === 'menu') {
         const fetchPublicRooms = async () => {
             try {
@@ -82,7 +91,7 @@ export default function WaveRider() {
             }
         };
         fetchPublicRooms();
-        const interval = setInterval(fetchPublicRooms, 3000);
+        const interval = setInterval(fetchPublicRooms, 8000);
         return () => clearInterval(interval);
     }
   }, [gameState]);
@@ -414,26 +423,39 @@ export default function WaveRider() {
     }
   };
 
-  const handleCreateRoom = async (isPublic: boolean) => {
-    SoundManager.init();
-    const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    try {
-        await supabase.from('rooms').insert([{ 
-            id: newRoomId, 
-            host_name: playerName || 'Anonymous', 
-            is_public: isPublic, 
-            state: 'waiting',
-            created_at: new Date().toISOString()
-        }]);
-    } catch (err) {
-        console.error('Error creating room in Supabase:', err);
-    }
-    engineRef.current?.createMultiplayerRoom(newRoomId);
-  };
+    const handleCreateRoom = async () => {
+        SoundManager.init();
+        const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+        
+        // Set state immediately for responsiveness
+        setGameState('multiplayer_lobby');
+        setCurrentRoom(newRoomId);
+        setIsLobbyHost(true);
+        
+        // Create room in engine/network
+        engineRef.current?.createMultiplayerRoom(newRoomId);
+
+        // Persist in Supabase in background
+        try {
+            supabase.from('rooms').insert([{ 
+                id: newRoomId, 
+                host_name: playerName || 'Anonymous', 
+                is_public: true, 
+                state: 'waiting',
+                created_at: new Date().toISOString()
+            }]).then(({ error }) => {
+              if (error) console.error('Error creating room in Supabase:', error);
+            });
+        } catch (err) {
+            console.error('Error creating room in Supabase:', err);
+        }
+    };
 
   const handleJoinRoom = (roomIdToJoin: string) => {
     SoundManager.init();
     if (roomIdToJoin) {
+        setGameState('multiplayer_lobby');
+        setCurrentRoom(roomIdToJoin.toUpperCase());
         engineRef.current?.joinMultiplayerRoom(roomIdToJoin);
     }
   };
@@ -708,7 +730,7 @@ export default function WaveRider() {
                   onClick={handleStartSinglePlayer}
                   className="w-full shrink-0 py-4 bg-gradient-to-b from-cyan-400 to-blue-600 text-white font-black text-2xl italic tracking-wider rounded-lg border-b-4 border-blue-800 hover:translate-y-1 hover:border-b-0 transition-all shadow-xl active:scale-95 cursor-pointer"
                 >
-                  PRACTICE MODE
+                  CARRERA SOL
                 </button>
 
                 <button 
@@ -726,17 +748,10 @@ export default function WaveRider() {
                     <h3 className="text-cyan-300 font-bold text-center mb-4 uppercase tracking-widest text-sm">Multiplayer Racing</h3>
                     <div className="flex flex-col gap-4">
                         <button 
-                          onClick={() => handleCreateRoom(true)}
+                          onClick={() => handleCreateRoom()}
                           className="w-full py-3 bg-gradient-to-b from-green-400 to-green-600 text-white font-bold text-xl italic rounded-lg border-b-4 border-green-800 hover:translate-y-1 hover:border-b-0 transition-all shadow-xl active:scale-95 cursor-pointer"
                         >
-                          CREATE PUBLIC ROOM
-                        </button>
-
-                        <button 
-                          onClick={() => handleCreateRoom(false)}
-                          className="w-full py-2 bg-black/60 text-white/80 font-bold text-sm uppercase rounded-lg border border-white/20 hover:bg-white/10 transition-all cursor-pointer"
-                        >
-                          Private Room (Code)
+                          CREATE ROOM
                         </button>
                         
                         <div className="flex gap-2">
@@ -959,12 +974,12 @@ export default function WaveRider() {
                     </div>
                 </div>
 
-                {/* Upgrade Shield - Only visible if hasFireBike */}
-                {hasFireBike && (
+                {/* Upgrade Shield - Only visible if hasFireBike or hasSuperBike */}
+                {(hasFireBike || hasSuperBike) && (
                   <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                           <h3 className="text-blue-400 font-bold text-xl uppercase tracking-widest mb-1">Cúpula Protectora</h3>
-                          <p className="text-white/60 text-sm">Afegeix 1 segon de durada a la cúpula quan fas un doble backflip.</p>
+                          <p className="text-white/60 text-sm">Aumenta la durada de la cúpula protectora.</p>
                           <p className="text-white font-bold text-sm mt-2 bg-black/40 px-3 py-1 rounded">Current Duration: {10.0 + (shieldDurationLevel - 1) * 1.0} seconds</p>
                       </div>
                       <div className="flex flex-col items-center shrink-0">
@@ -981,7 +996,7 @@ export default function WaveRider() {
                 )}
 
                 {/* Extra Charges Upgrade  */}
-                {(hasFireBike || hasGatoBike || hasRampeadoraBike) && (
+                {(hasFireBike || hasGatoBike || hasRampeadoraBike || hasSuperBike) && (
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                             <h3 className="text-yellow-400 font-bold text-xl uppercase tracking-widest mb-1">Passi de Càrregues Extra</h3>
@@ -991,8 +1006,9 @@ export default function WaveRider() {
                         <div className="flex flex-col items-center shrink-0">
                             <button 
                                 onClick={async () => {
-                                    if (totalCoins >= 150) {
-                                        const newCoins = totalCoins - 150;
+                                    const cost = 1000;
+                                    if (totalCoins >= cost) {
+                                        const newCoins = totalCoins - cost;
                                         setTotalCoins(newCoins);
                                         const newMax = maxFireCharges + 1;
                                         setMaxFireCharges(newMax);
@@ -1000,12 +1016,12 @@ export default function WaveRider() {
                                         await savePlayerStateToSupabase(newCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, newMax, shieldDurationLevel, equippedBike);
                                     }
                                 }}
-                                disabled={totalCoins < 150}
+                                disabled={totalCoins < 1000}
                                 className="bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed text-black font-black px-6 py-3 rounded-lg cursor-pointer transition-colors shadow-md w-full sm:w-auto"
                             >
                                 MILLORAR
                             </button>
-                            <span className="text-yellow-400 font-bold mt-2 text-sm text-center">150 COINS</span>
+                            <span className="text-yellow-400 font-bold mt-2 text-sm text-center">1000 COINS</span>
                         </div>
                     </div>
                 )}
@@ -1024,40 +1040,105 @@ export default function WaveRider() {
       )}
 
       {/* Lobby Overlay */}
-      {gameState === 'multiplayer_lobby' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-lg z-30 select-none">
-            <h2 className="text-4xl font-black text-cyan-400 italic mb-2">RACING LOBBY</h2>
-            <div className="bg-white/10 px-6 py-2 rounded-full border border-white/20 mb-8">
-               <span className="text-white font-bold">ROOM CODE: </span>
-               <span className="text-yellow-400 font-bold tracking-widest text-xl">{currentRoom}</span>
-            </div>
+    {gameState === 'multiplayer_lobby' && (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl z-30 select-none">
+          <div className="mb-8 flex flex-col items-center gap-2">
+            <h2 className="text-5xl font-black text-cyan-400 italic drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">RACING LOBBY</h2>
+            <div className="bg-white/5 border border-white/10 px-4 py-1 rounded-full text-[10px] text-white/40 uppercase tracking-[0.3em]">Waiting for players</div>
+          </div>
 
-            <div className="bg-black/50 border border-white/20 p-6 rounded-xl w-full max-w-md min-h-[300px]">
-                <h3 className="text-white/60 text-sm font-bold uppercase tracking-widest mb-4">Players ({lobbyPlayers.length})</h3>
-                <div className="flex flex-col gap-3">
-                    {lobbyPlayers.map((p, i) => (
-                        <div key={p.id} className="bg-white/5 border border-white/10 rounded-lg p-3 flex justify-between items-center text-white font-bold">
-                            <span>{p.name || `Player ${i + 1}`}</span>
-                            {p.id === engineRef.current?.network.socketId && <span className="text-cyan-400 text-xs uppercase bg-cyan-900/40 px-2 py-1 rounded">You</span>}
+          <div className="bg-yellow-400/10 px-8 py-4 rounded-2xl border-2 border-yellow-400 shadow-[0_0_30px_rgba(234,179,8,0.3)] mb-10 group relative">
+             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-black text-[10px] font-black px-3 py-1 rounded uppercase tracking-widest">Room Code</div>
+             <span className="text-yellow-400 font-black tracking-[0.2em] text-5xl tabular-nums">{currentRoom}</span>
+          </div>
+
+          <div className="bg-black/60 border border-white/10 p-6 rounded-2xl w-full max-w-lg shadow-2xl backdrop-blur-md">
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                <h3 className="text-white font-black uppercase tracking-widest text-lg">Players In Race</h3>
+                <span className="bg-white/10 text-white px-3 py-1 rounded-full text-xs font-bold">{lobbyPlayers.length} / 8</span>
+              </div>
+              
+              <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-style">
+                  {lobbyPlayers.length === 0 ? (
+                    <div className="text-center py-10 text-white/20 font-bold italic">Gathering team...</div>
+                  ) : (
+                    lobbyPlayers.map((p, i) => (
+                        <div key={p.id} className={`group bg-white/5 border ${p.id === engineRef.current?.network.socketId ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-white/5'} rounded-xl p-4 flex justify-between items-center transition-all hover:bg-white/10`}>
+                            <div className="flex items-center gap-4">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${
+                                p.bike === 'fire' ? 'bg-orange-500 text-white' :
+                                p.bike === 'gato' ? 'bg-green-500 text-black' :
+                                p.bike === 'super' ? 'bg-purple-500 text-white' :
+                                p.bike === 'rampeadora' ? 'bg-yellow-400 text-black' :
+                                'bg-gray-600 text-white'
+                              }`}>
+                                {p.name ? p.name[0] : '?'}
+                              </div>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-white font-black text-lg">{p.name || `Player ${i + 1}`}</span>
+                                  {p.id === engineRef.current?.network.socketId && <span className="text-[10px] bg-cyan-400 text-black font-black px-2 py-0.5 rounded leading-none">YOU</span>}
+                                </div>
+                                <span className="text-[10px] text-white/40 uppercase font-bold tracking-widest">
+                                  {p.bike ? `${p.bike} Moto` : 'Stock Bike'}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {i === 0 && (
+                              <div className="flex items-center gap-1.5 bg-yellow-500/20 px-3 py-1.5 rounded-lg border border-yellow-500/30">
+                                <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
+                                <span className="text-yellow-400 text-[10px] font-black uppercase tracking-widest leading-none">HOST</span>
+                              </div>
+                            )}
                         </div>
-                    ))}
-                </div>
-            </div>
+                    ))
+                  )}
+              </div>
+          </div>
 
-             {countdown !== null ? (
-                <div className="mt-8 text-6xl font-black text-white italic animate-pulse drop-shadow-[0_0_20px_rgba(34,211,238,0.8)]">
-                  STARTING IN {countdown}...
+           {countdown !== null ? (
+              <div className="mt-10 flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-5 duration-500">
+                <div className="text-[10px] text-cyan-400 font-black uppercase tracking-[0.5em] animate-pulse">Engines Reving</div>
+                <div className="text-8xl font-black text-white italic drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">
+                  {countdown}
                 </div>
-             ) : (
+              </div>
+           ) : (
+              <div className="mt-10 w-full max-w-lg flex flex-col gap-4">
+                {isLobbyHost ? (
+                  <button 
+                      onClick={handleStartMultiplayer}
+                      disabled={lobbyPlayers.length < 1}
+                      className="w-full py-5 bg-gradient-to-b from-cyan-400 to-blue-600 text-white font-black text-2xl italic tracking-[0.1em] rounded-2xl border-b-8 border-blue-800 hover:translate-y-1 hover:border-b-4 transition-all shadow-[0_20px_40px_rgba(6,182,212,0.3)] active:scale-95 cursor-pointer disabled:opacity-50 disabled:grayscale"
+                  >
+                      START RACE
+                  </button>
+                ) : (
+                  <div className="w-full py-5 bg-white/5 border-2 border-white/10 rounded-2xl flex items-center justify-center gap-3">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                    </div>
+                    <span className="text-white/60 font-black italic text-xl uppercase tracking-widest font-sans">Waiting for Host...</span>
+                  </div>
+                )}
+                
                 <button 
-                    onClick={handleStartMultiplayer}
-                    className="mt-8 w-full max-w-md py-4 bg-gradient-to-b from-cyan-400 to-blue-600 text-white font-black text-2xl italic tracking-wider rounded-lg border-b-4 border-blue-800 hover:translate-y-1 hover:border-b-0 transition-all shadow-xl active:scale-95 cursor-pointer pointer-events-auto"
+                  onClick={() => {
+                    engineRef.current?.network.socket?.disconnect();
+                    engineRef.current?.network.connect(); // reconnect to be fresh
+                    setGameState('menu');
+                  }}
+                  className="text-white/40 hover:text-white font-black text-sm uppercase tracking-widest transition-colors py-2"
                 >
-                    START RACE
+                  Leave Room
                 </button>
-             )}
-        </div>
-      )}
+              </div>
+           )}
+      </div>
+    )}
 
       {/* Game Over overlay */}
       {gameState === 'gameover' && (

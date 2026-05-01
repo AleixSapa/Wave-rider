@@ -34,6 +34,7 @@ export class Network {
     });
 
     this.socket.on('room_state', (state: any) => {
+      console.log("Network: room_state received", state);
       this.players = state.players;
       if (this.onRoomState) this.onRoomState(state);
     });
@@ -67,12 +68,12 @@ export class Network {
     });
   }
 
-  createRoom(roomId?: string, playerName?: string) {
-    this.socket?.emit('create_room', roomId, playerName);
+  createRoom(roomId?: string, playerName?: string, bike?: string) {
+    this.socket?.emit('create_room', roomId, playerName, bike);
   }
 
-  joinRoom(id: string, playerName?: string) {
-    this.socket?.emit('join_room', id, playerName);
+  joinRoom(id: string, playerName?: string, bike?: string) {
+    this.socket?.emit('join_room', id, playerName, bike);
   }
 
   startGame() {

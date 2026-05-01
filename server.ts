@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import { Server } from 'socket.io';
 import http from 'http';
 import path from 'path';
@@ -10,6 +9,7 @@ interface Room {
   id: string;
   players: Record<string, any>;
   state: 'waiting' | 'playing' | 'finished';
+  hostId: string;
   startTime?: number;
 }
 
@@ -29,24 +29,28 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('create_room', (customRoomId?: string, playerName?: string) => {
+    socket.on('create_room', (customRoomId?: string, playerName?: string, bike?: string) => {
       const roomId = customRoomId || Math.random().toString(36).substring(2, 8).toUpperCase();
+      console.log(`Room created: ${roomId} by ${playerName} (${bike || 'default'})`);
       rooms[roomId] = {
         id: roomId,
         players: {
-          [socket.id]: { id: socket.id, name: playerName || 'Anonymous', score: 0, distance: 0, x: 200, y: 0, rotation: 0, isDead: false }
+          [socket.id]: { id: socket.id, name: playerName || 'Anonymous', score: 0, distance: 0, x: 200, y: 0, rotation: 0, isDead: false, bike: bike || 'default' }
         },
+        hostId: socket.id,
         state: 'waiting'
       };
       socket.join(roomId);
       socket.emit('room_created', roomId);
+      // Emit to everyone in room including sender to ensure they get the state
       io.to(roomId).emit('room_state', rooms[roomId]);
     });
 
-    socket.on('join_room', (roomId: string, playerName?: string) => {
+    socket.on('join_room', (roomId: string, playerName?: string, bike?: string) => {
       const room = rooms[roomId];
       if (room && room.state === 'waiting') {
-        room.players[socket.id] = { id: socket.id, name: playerName || 'Anonymous', score: 0, distance: 0, x: 200, y: 0, rotation: 0, isDead: false };
+        console.log(`Player ${playerName} joining room: ${roomId} with bike ${bike || 'default'}`);
+        room.players[socket.id] = { id: socket.id, name: playerName || 'Anonymous', score: 0, distance: 0, x: 200, y: 0, rotation: 0, isDead: false, bike: bike || 'default' };
         socket.join(roomId);
         socket.emit('joined_room', roomId);
         io.to(roomId).emit('room_state', room);
@@ -105,13 +109,20 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+      console.log('Vite middleware loaded');
+    } catch (e) {
+      console.error('Failed to load Vite server:', e);
+    }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    console.log('Serving production from:', distPath);
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -120,7 +131,11 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});

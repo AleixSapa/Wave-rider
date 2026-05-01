@@ -74,13 +74,27 @@ export class GameEngine {
     this.network.connect();
     
     this.network.onRoomState = (state) => {
+      console.log("Engine: Room state received:", state);
       if (this.gameState !== 'playing' && this.gameState !== 'gameover') {
         this.gameState = 'multiplayer_lobby';
         this.isMultiplayer = true;
-        // Check if we are host (first player might be arbitrarily host, actually anyone can start for simplicity)
-        if (this.onLobbyUpdate) {
-            this.onLobbyUpdate(state.id, state.players, true);
+        
+        // Host is the one who created the room or the first player in the list
+        const checkHost = () => {
+          const myId = this.network.socketId || this.network.socket?.id;
+          const isHost = state.hostId === myId || (!state.hostId && Object.keys(state.players)[0] === myId);
+          console.log("Am I host?", isHost, "My ID:", myId, "Host ID:", state.hostId);
+          
+          if (this.onLobbyUpdate) {
+              this.onLobbyUpdate(state.id, state.players, isHost);
+          }
+        };
+
+        if (this.network.socket?.id) {
+            this.network.socketId = this.network.socket.id;
         }
+        
+        checkHost();
       }
     };
 
@@ -111,11 +125,11 @@ export class GameEngine {
   }
 
   createMultiplayerRoom(roomId?: string) {
-    this.network.createRoom(roomId, this.playerName);
+    this.network.createRoom(roomId, this.playerName, this.player.equippedBike);
   }
 
   joinMultiplayerRoom(roomId: string) {
-    this.network.joinRoom(roomId, this.playerName);
+    this.network.joinRoom(roomId, this.playerName, this.player.equippedBike);
   }
 
   startMultiplayerGame() {
@@ -256,7 +270,8 @@ export class GameEngine {
         score: this.player.score,
         distance: this.player.distance,
         isDead: this.player.isDead,
-        name: this.playerName
+        name: this.playerName,
+        bike: this.player.equippedBike
       });
     }
 

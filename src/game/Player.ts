@@ -62,7 +62,7 @@ export class Player {
     // Movement
     let currentSpeed = this.baseSpeed;
     if (this.boostTimer > 0) {
-      currentSpeed = this.baseSpeed * 2; // Boost is 2x base speed
+      currentSpeed = this.baseSpeed * 1.5; // Boost is 1.5x base speed (approx 600 max)
       this.boostTimer -= dt;
       this.particles.emitTrail(this.x, this.y, true);
     } else if (this.isGrounded) {
@@ -160,9 +160,8 @@ export class Player {
   }
 
   activateGatoJump() {
-    if (!this.isDead && this.bikeCharges > 0) {
+    if (!this.isDead) {
         this.vy = -600; // Big vertical jump
-        this.bikeCharges--;
         this.isGrounded = false;
         this.particles.emitSplash(this.x, this.y);
     }
@@ -171,7 +170,7 @@ export class Player {
   activateSuperJump() {
     if (!this.isDead) {
         this.vy = -1500; // High vertical jump like rampeadora ramp
-        this.vx += 400; // Increase forward boost slightly too
+        this.vx += 200; // Increase forward boost to reach ~600 (from ~400 base)
         this.isSuperJumping = true;
         this.isGrounded = false;
         this.particles.emitSplash(this.x, this.y);
@@ -225,6 +224,9 @@ export class Player {
         if (this.equippedBike === 'fire' && this.isShieldReady) {
           this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
           this.isShieldReady = false;
+        }
+        if (this.equippedBike === 'super') {
+          this.shieldTimer = Math.max(this.shieldTimer, 5.0);
         }
         this.score += flipsCompleted * 100 * this.combo;
       } else if (absoluteAngle < 0.2 && this.totalRotationInAir > 1) { // Near perfect landing, small jump

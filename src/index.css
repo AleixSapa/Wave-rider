@@ -8,4 +8,18 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+  .scrollbar-style::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-style::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+  }
+  .scrollbar-style::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+  }
+  .scrollbar-style::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
 }
