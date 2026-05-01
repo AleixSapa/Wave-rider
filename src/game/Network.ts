@@ -15,7 +15,9 @@ export class Network {
   onError?: (msg: string) => void;
 
   connect() {
-    this.socket = io();
+    // Per GitHub Pages, hem de poder passar la URL del servidor
+    const serverUrl = import.meta.env.VITE_SERVER_URL || '';
+    this.socket = io(serverUrl);
     
     this.socket.on('connect', () => {
       this.socketId = this.socket?.id || null;
