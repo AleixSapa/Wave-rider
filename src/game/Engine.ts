@@ -29,7 +29,7 @@ export class GameEngine {
   }
 
   // Callbacks for React UI
-  onScoreUpdate?: (distance: number, combo: number, speed: number, coins: number, fireCharges: number, shieldTimer: number, shieldReady: boolean) => void;
+  onScoreUpdate?: (distance: number, combo: number, speed: number, coins: number, fireCharges: number, shieldTimer: number, shieldReady: boolean, boostTimer: number) => void;
   onGameOver?: (finalScore: number, allPlayersData?: any, sessionCoins?: number) => void;
   onLobbyUpdate?: (roomId: string, players: Record<string, any>, isHost: boolean) => void;
   onGameCountdown?: (startTime: number) => void;
@@ -164,6 +164,13 @@ export class GameEngine {
               SoundManager.init();
               SoundManager.playJump();
           }
+        } else if (this.player.equippedBike === 'super') {
+          if (this.player.bikeCharges > 0) {
+              this.player.bikeCharges--;
+              this.player.activateSuperJump();
+              SoundManager.init();
+              SoundManager.playJump();
+          }
         } else if (this.player.equippedBike === 'gato') {
           if (this.player.bikeCharges > 0) {
               this.player.bikeCharges--;
@@ -261,7 +268,7 @@ export class GameEngine {
 
     // Score callback
     if (this.onScoreUpdate) {
-      this.onScoreUpdate(this.player.distance, this.player.combo, Math.round(this.player.vx), this.player.coins, this.player.bikeCharges, this.player.shieldTimer, this.player.isShieldReady);
+      this.onScoreUpdate(this.player.distance, this.player.combo, Math.round(this.player.vx), this.player.coins, this.player.bikeCharges, this.player.shieldTimer, this.player.isShieldReady, this.player.boostTimer);
     }
 
     // Check game over transition

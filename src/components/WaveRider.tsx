@@ -15,6 +15,7 @@ export default function WaveRider() {
   const [sessionCoins, setSessionCoins] = useState(0);
   const [sessionFireCharges, setSessionFireCharges] = useState(0);
   const [sessionShieldTimer, setSessionShieldTimer] = useState(0);
+  const [sessionBoostTimer, setSessionBoostTimer] = useState(0);
   const [isShieldReady, setIsShieldReady] = useState(false);
   const [totalCoins, setTotalCoins] = useState(0);
   const [speedLevel, setSpeedLevel] = useState(1);
@@ -36,11 +37,13 @@ export default function WaveRider() {
   const [hasFireBike, setHasFireBike] = useState<boolean>(false);
   const [hasGatoBike, setHasGatoBike] = useState<boolean>(false);
   const [hasRampeadoraBike, setHasRampeadoraBike] = useState<boolean>(false);
+  const [hasSuperBike, setHasSuperBike] = useState<boolean>(false);
   const [maxFireCharges, setMaxFireCharges] = useState<number>(1);
   const [bikePrices, setBikePrices] = useState<Record<string, number>>({
     fire: 500,
     gato: 800,
-    rampeadora: 1200
+    rampeadora: 1200,
+    super: 2500
   });
 
   useEffect(() => {
@@ -142,6 +145,7 @@ export default function WaveRider() {
         setHasFireBike(!!data.has_fire_bike);
         setHasGatoBike(!!data.has_gato_bike);
         setHasRampeadoraBike(!!data.has_rampeadora_bike);
+        setHasSuperBike(!!data.has_super_bike);
         setMaxFireCharges(data.max_fire_charges || 1);
         setEquippedBike(data.equipped_bike || 'default');
         setNameConfirmed(true);
@@ -174,6 +178,7 @@ export default function WaveRider() {
         setHasFireBike(!!row.has_fire_bike);
         setHasGatoBike(!!row.has_gato_bike);
         setHasRampeadoraBike(!!row.has_rampeadora_bike);
+        setHasSuperBike(!!row.has_super_bike);
         setMaxFireCharges(row.max_fire_charges || 1);
         // Comprovar si existeix la columna equipped_bike en la resposta
         const eqBike = row.equipped_bike || 'default';
@@ -188,6 +193,7 @@ export default function WaveRider() {
           has_fire_bike: row.has_fire_bike || false,
           has_gato_bike: row.has_gato_bike || false,
           has_rampeadora_bike: row.has_rampeadora_bike || false,
+          has_super_bike: row.has_super_bike || false,
           max_fire_charges: row.max_fire_charges || 1,
           shield_duration_level: row.shield_duration_level || 1,
           equipped_bike: eqBike
@@ -204,6 +210,7 @@ export default function WaveRider() {
           setHasFireBike(false);
           setHasGatoBike(false);
           setHasRampeadoraBike(false);
+          setHasSuperBike(false);
           setEquippedBike('default');
         }
         setNameConfirmed(true);
@@ -241,6 +248,7 @@ export default function WaveRider() {
         has_fire_bike: hasFireBike,
         has_gato_bike: hasGatoBike,
         has_rampeadora_bike: hasRampeadoraBike,
+        has_super_bike: hasSuperBike,
         max_fire_charges: maxFireCharges,
         shield_duration_level: shieldDurationLevel,
         updated_at: new Date().toISOString()
@@ -284,6 +292,7 @@ export default function WaveRider() {
           has_fire_bike: hasFireBike,
           has_gato_bike: hasGatoBike,
           has_rampeadora_bike: hasRampeadoraBike,
+          has_super_bike: hasSuperBike,
           max_fire_charges: maxFireCharges,
           shield_duration_level: shieldDurationLevel,
           equipped_bike: equippedBike
@@ -328,7 +337,7 @@ export default function WaveRider() {
     engine.player.equippedBike = equippedBike;
     engine.player.maxBikeCharges = maxFireCharges;
 
-    engine.onScoreUpdate = (d, c, sp, cn, fc, st, sr) => {
+    engine.onScoreUpdate = (d, c, sp, cn, fc, st, sr, bt) => {
       setDistance(d);
       setCombo(c);
       setSpeed(sp);
@@ -336,6 +345,7 @@ export default function WaveRider() {
       setSessionFireCharges(fc);
       setSessionShieldTimer(st);
       setIsShieldReady(sr);
+      setSessionBoostTimer(bt);
     };
 
     engine.onGameOver = async (finalDistance, allPlayersData, coinsCollected = 0) => {
@@ -435,7 +445,7 @@ export default function WaveRider() {
     engineRef.current?.startMultiplayerGame();
   };
 
-  const savePlayerStateToSupabase = async (coins: number, speed_lvl: number, has_fire: boolean, has_gato: boolean, has_ramp: boolean, max_charges: number, shield_lvl: number, eq_bike: string) => {
+  const savePlayerStateToSupabase = async (coins: number, speed_lvl: number, has_fire: boolean, has_gato: boolean, has_ramp: boolean, has_super: boolean, max_charges: number, shield_lvl: number, eq_bike: string) => {
       const pName = playerName || 'Anonymous';
       if (pName === 'Anonymous') return;
 
@@ -448,6 +458,7 @@ export default function WaveRider() {
               has_fire_bike: has_fire,
               has_gato_bike: has_gato,
               has_rampeadora_bike: has_ramp,
+              has_super_bike: has_super,
               max_fire_charges: max_charges,
               shield_duration_level: shield_lvl,
               updated_at: new Date().toISOString()
@@ -496,7 +507,7 @@ export default function WaveRider() {
       }
   };
 
-  const handleBuyBike = async (bikeType: 'fire' | 'rampeadora' | 'gato') => {
+  const handleBuyBike = async (bikeType: 'fire' | 'rampeadora' | 'gato' | 'super') => {
       const price = bikePrices[bikeType] || 0;
 
       if (totalCoins >= price) {
@@ -505,17 +516,20 @@ export default function WaveRider() {
           let newHasFire = hasFireBike;
           let newHasRamp = hasRampeadoraBike;
           let newHasGato = hasGatoBike;
+          let newHasSuper = hasSuperBike;
           
           if (bikeType === 'fire') newHasFire = true;
           if (bikeType === 'rampeadora') newHasRamp = true;
           if (bikeType === 'gato') newHasGato = true;
+          if (bikeType === 'super') newHasSuper = true;
           
           setTotalCoins(newCoins);
           setHasFireBike(newHasFire);
           setHasRampeadoraBike(newHasRamp);
           setHasGatoBike(newHasGato);
+          setHasSuperBike(newHasSuper);
           
-          await savePlayerStateToSupabase(newCoins, speedLevel, newHasFire, newHasGato, newHasRamp, maxFireCharges, shieldDurationLevel, equippedBike);
+          await savePlayerStateToSupabase(newCoins, speedLevel, newHasFire, newHasGato, newHasRamp, newHasSuper, maxFireCharges, shieldDurationLevel, equippedBike);
       }
   };
 
@@ -530,7 +544,7 @@ export default function WaveRider() {
          if (engineRef.current) {
             engineRef.current.setPlayerBaseSpeed(200 + (newLevel - 1) * 20);
          }
-         await savePlayerStateToSupabase(newCoins, newLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, shieldDurationLevel, equippedBike);
+         await savePlayerStateToSupabase(newCoins, newLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, equippedBike);
       }
   };
 
@@ -545,7 +559,7 @@ export default function WaveRider() {
           if (engineRef.current) {
               engineRef.current.player.shieldMaxDuration = 10.0 + (newLevel - 1) * 1.0;
           }
-          await savePlayerStateToSupabase(newCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, newLevel, equippedBike);
+          await savePlayerStateToSupabase(newCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, newLevel, equippedBike);
       }
   };
 
@@ -590,6 +604,17 @@ export default function WaveRider() {
                   {sessionShieldTimer <= 0 && (
                     <div className="text-[8px] uppercase text-cyan-200/80 font-bold">Land or Hit to activate</div>
                   )}
+                </div>
+              )}
+              {equippedBike === 'super' && sessionBoostTimer > 0 && (
+                <div className="backdrop-blur-md rounded-xl px-4 py-2 border border-yellow-400 bg-yellow-500/90 shadow-[0_0_20px_rgba(234,179,8,0.6)] animate-pulse flex flex-col items-center gap-1">
+                  <div className="text-[10px] uppercase tracking-widest font-black text-black leading-none">
+                    SUPER MOTO ACTIVE
+                  </div>
+                  <div className="text-2xl font-black tabular-nums text-black leading-none">
+                    {sessionBoostTimer.toFixed(1)}s
+                  </div>
+                  <div className="text-[8px] uppercase text-black/70 font-bold">Protection & Boost</div>
                 </div>
               )}
               {combo > 1 && (
@@ -796,7 +821,7 @@ export default function WaveRider() {
                         <button 
                             onClick={async () => {
                                 setEquippedBike('default');
-                                await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, shieldDurationLevel, 'default');
+                                await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, 'default');
                             }}
                             className={`${equippedBike === 'default' ? 'bg-cyan-400 text-black' : 'bg-white/20 text-white hover:bg-white/30'} font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full`}
                         >
@@ -814,7 +839,7 @@ export default function WaveRider() {
                             <button 
                                 onClick={async () => {
                                     setEquippedBike('fire');
-                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, shieldDurationLevel, 'fire');
+                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, 'fire');
                                 }}
                                 className={`${equippedBike === 'fire' ? 'bg-orange-500 text-white' : 'bg-white/20 text-white hover:bg-white/30'} font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full`}
                             >
@@ -841,7 +866,7 @@ export default function WaveRider() {
                             <button 
                                 onClick={async () => {
                                     setEquippedBike('gato');
-                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, shieldDurationLevel, 'gato');
+                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, 'gato');
                                 }}
                                 className={`${equippedBike === 'gato' ? 'bg-green-500 text-black' : 'bg-white/20 text-white hover:bg-white/30'} font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full`}
                             >
@@ -858,6 +883,33 @@ export default function WaveRider() {
                         )}
                     </div>
 
+                    {/* Super Moto */}
+                    <div className={`border ${equippedBike === 'super' ? 'border-purple-500 bg-purple-900/20' : 'border-white/10 bg-white/5'} rounded-2xl p-4 flex flex-col items-center gap-3 transition-colors`}>
+                        <div className="text-center">
+                            <h4 className="text-purple-500 font-bold text-lg uppercase">Super Moto</h4>
+                            <p className="text-white/40 text-[10px]">Salt diagonal + Foc 30s (Enter).</p>
+                        </div>
+                        {hasSuperBike ? (
+                            <button 
+                                onClick={async () => {
+                                    setEquippedBike('super');
+                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, 'super');
+                                }}
+                                className={`${equippedBike === 'super' ? 'bg-purple-500 text-white' : 'bg-white/20 text-white hover:bg-white/30'} font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full`}
+                            >
+                                {equippedBike === 'super' ? 'EQUIPADA' : 'EQUIPAR'}
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={() => handleBuyBike('super')}
+                                disabled={totalCoins < (bikePrices.super || 2500)}
+                                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full"
+                            >
+                                COMPRAR ({bikePrices.super || 2500})
+                            </button>
+                        )}
+                    </div>
+
                     {/* Rampeadora */}
                     <div className={`border ${equippedBike === 'rampeadora' ? 'border-yellow-400 bg-yellow-900/20' : 'border-white/10 bg-white/5'} rounded-2xl p-4 flex flex-col items-center gap-3 transition-colors`}>
                         <div className="text-center">
@@ -868,7 +920,7 @@ export default function WaveRider() {
                             <button 
                                 onClick={async () => {
                                     setEquippedBike('rampeadora');
-                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, maxFireCharges, shieldDurationLevel, 'rampeadora');
+                                    await savePlayerStateToSupabase(totalCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, maxFireCharges, shieldDurationLevel, 'rampeadora');
                                 }}
                                 className={`${equippedBike === 'rampeadora' ? 'bg-yellow-400 text-black' : 'bg-white/20 text-white hover:bg-white/30'} font-black px-4 py-2 rounded-lg cursor-pointer transition-colors w-full`}
                             >
@@ -945,7 +997,7 @@ export default function WaveRider() {
                                         const newMax = maxFireCharges + 1;
                                         setMaxFireCharges(newMax);
                                         SoundManager.init();
-                                        await savePlayerStateToSupabase(newCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, newMax, shieldDurationLevel, equippedBike);
+                                        await savePlayerStateToSupabase(newCoins, speedLevel, hasFireBike, hasGatoBike, hasRampeadoraBike, hasSuperBike, newMax, shieldDurationLevel, equippedBike);
                                     }
                                 }}
                                 disabled={totalCoins < 150}

@@ -28,6 +28,7 @@ export class Player {
   maxBikeCharges: number = 1;
   
   isDead: boolean = false;
+  isSuperJumping: boolean = false;
 
   constructor(private particles: ParticleSystem) {
     this.reset();
@@ -51,6 +52,7 @@ export class Player {
     this.distance = 0;
     this.coins = 0;
     this.isDead = false;
+    this.isSuperJumping = false;
     this.bikeCharges = this.maxBikeCharges;
   }
 
@@ -71,7 +73,12 @@ export class Player {
       this.shieldTimer -= dt;
     }
 
-    this.vx = currentSpeed;
+    if (this.isGrounded) {
+      this.vx = currentSpeed;
+    } else if (this.boostTimer > 0) {
+      this.vx = Math.max(this.vx, currentSpeed);
+    }
+    
     this.x += this.vx * dt;
     this.distance = Math.floor(this.x / 100);
 
@@ -161,7 +168,28 @@ export class Player {
     }
   }
 
+  activateSuperJump() {
+    if (!this.isDead) {
+        this.vy = -1500; // High vertical jump like rampeadora ramp
+        this.vx += 400; // Increase forward boost slightly too
+        this.isSuperJumping = true;
+        this.isGrounded = false;
+        this.particles.emitSplash(this.x, this.y);
+    }
+  }
+
   evaluateLanding() {
+    if (this.isSuperJumping) {
+      this.isSuperJumping = false;
+      this.isDead = false; // "continuar be" even if upside down
+      this.rotation = 0;
+      this.boostTimer = 30.0; // "potencia de la moto de fuego durant 30 segons"
+      this.shieldTimer = 30.0; // Also give it 30s protection shield
+      this.particles.emitSplash(this.x, this.y);
+      SoundManager.playSplash();
+      return;
+    }
+
     // Normalize rotation between -PI and PI
     let normalizedRot = this.rotation % (Math.PI * 2);
     if (normalizedRot < -Math.PI) normalizedRot += Math.PI * 2;
@@ -176,27 +204,38 @@ export class Player {
     const tolerance = this.equippedBike === 'gato' ? (Math.PI * 0.6) : (Math.PI / 2);
 
     if (absoluteAngle > tolerance) {
+      // Super Moto Bounce logic: if shield is active on super bike, bounce instead of dying
+      if (this.equippedBike === 'super' && this.shieldTimer > 0) {
+        this.vy = -800; // Bounce high
+        this.vx *= 0.9; // Maintain most speed
+        this.rotation = 0;
+        this.totalRotationInAir = 0;
+        this.isGrounded = false;
+        this.particles.emitSplash(this.x, this.y);
+        SoundManager.playSplash();
+        return;
+      }
       // Crashed (landed upside down)
       this.die();
     } else {
       // Good landing
       if (flipsCompleted > 0) {
         this.combo++;
-        this.boostTimer = 2.0; // 2 seconds boost
+        this.boostTimer = Math.max(this.boostTimer, 2.0); // 2 seconds boost, don't overwrite if longer
         if (this.equippedBike === 'fire' && this.isShieldReady) {
-          this.shieldTimer = this.shieldMaxDuration;
+          this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
           this.isShieldReady = false;
         }
         this.score += flipsCompleted * 100 * this.combo;
       } else if (absoluteAngle < 0.2 && this.totalRotationInAir > 1) { // Near perfect landing, small jump
         // small bonus?
         if (this.equippedBike === 'fire' && this.isShieldReady) {
-          this.shieldTimer = this.shieldMaxDuration;
+          this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
           this.isShieldReady = false;
         }
       } else if (this.isShieldReady) {
         // Even if no flips or perfect landing, if you land we activate the ready shield
-        this.shieldTimer = this.shieldMaxDuration;
+        this.shieldTimer = Math.max(this.shieldTimer, this.shieldMaxDuration);
         this.isShieldReady = false;
       } else {
         // normal landing, break combo if no flips
@@ -225,8 +264,8 @@ export class Player {
     // Scale up slightly as requested (+20 pixels roughly, say 1.5x scale)
     ctx.scale(1.5, 1.5);
 
-    // If boosting with fire bike, draw a fire aura around it
-    if (this.equippedBike === 'fire' && this.boostTimer > 0) {
+    // If boosting with fire bike or super bike, draw a fire aura around it
+    if ((this.equippedBike === 'fire' || this.equippedBike === 'super') && this.boostTimer > 0) {
       ctx.save();
       // Animate pulsing aura
       const pulse = 1.0 + Math.sin(Date.now() / 100) * 0.2;
@@ -244,6 +283,7 @@ export class Player {
 
     // Draw JetSki (simplified)
     if (this.equippedBike === 'fire') ctx.fillStyle = '#ff6600';
+    else if (this.equippedBike === 'super') ctx.fillStyle = '#a855f7'; // purple-500
     else if (this.equippedBike === 'gato') ctx.fillStyle = '#444444';
     else if (this.equippedBike === 'rampeadora') ctx.fillStyle = '#3366ff';
     else ctx.fillStyle = '#ff3366';
@@ -258,6 +298,7 @@ export class Player {
 
     // Rider
     if (this.equippedBike === 'fire') ctx.fillStyle = '#ffff00';
+    else if (this.equippedBike === 'super') ctx.fillStyle = '#ffffff';
     else if (this.equippedBike === 'gato') ctx.fillStyle = '#00ff66';
     else if (this.equippedBike === 'rampeadora') ctx.fillStyle = '#ffffff';
     else ctx.fillStyle = '#33ccff';
